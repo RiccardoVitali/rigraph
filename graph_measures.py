@@ -3,7 +3,7 @@ import scipy
 from scipy.linalg import expm
 import pykov
 import random
-
+import networkx as nx
 
 
 def check_positivity_element_wise(self):
@@ -94,9 +94,9 @@ def communicability(self):  # prende in argomento la matrice W e ritorna la matr
     return expm(self)
 
 
-def estrada_index(self):  # prende in argomento la matrice W e ritorna un numero ( riscalata con n )
+def estrada_index(self):  # prende in argomento la matrice W e ritorna un numero
     n = len(self)
-    return np.trace(expm(self)/n)
+    return np.trace(expm(self))
 
 
 def estrada_01(self):
@@ -107,10 +107,10 @@ def estrada_01(self):
     s = 0
     for i in range(0, n):
         s += (x[i] - x_min) / (x_max - x_min)
-    return s/n
+    return s / n
 
 
-def comm_01(self):
+def communicability_01(self):
     n = len(self)
     comm = expm(self)
     c_max = comm.max()
@@ -119,21 +119,10 @@ def comm_01(self):
     for i in range(0, n):
         for j in range(0, n):
             s += (comm[i][j] - c_min) / (c_max - c_min)
-    return s/(n*n)
+    return s / (n * n)
 
 
-def degrees(self):   # prende in argomente la matrice W e ritorna il vettore dei gradi ( o delle forze )
-    lista_gradi = []
-    n = len(self)
-    for i in range(0, n):
-        x = 0
-        for j in range(0, n):
-            x += self[i][j]
-        lista_gradi.append(x)
-    return lista_gradi
-
-
-def out_strengths(self):   # prende in argomente la matrice W e ritorna il vettore delle s^out  (IDENTICA A degrees)
+def out_strengths(self):  # prende in argomente la matrice W e ritorna il vettore delle s^out
     lista_s_out = []
     n = len(self)
     for i in range(0, n):
@@ -150,13 +139,14 @@ def total_comm_for_unweighted(self):
     return np.dot(np.ones(n), (np.dot(communicability(self), np.ones(n).transpose())))
 
 
-def total_comm_for_weighted(self):  # prende in argomento la matrice W e ritorna un numero (!! normalizzata per D^-0.5 !!)
+def total_comm_for_weighted(
+        self):  # prende in argomento la matrice W e ritorna un numero (!! normalizzata per D^-0.5 !!)
     n = len(self)
     s_out = out_strengths(self)
     diag = np.diag(s_out)
     D = np.power(np.linalg.inv(diag), 0.5)
     W_tilde = np.matmul(D, np.matmul(self, D))
-    return np.dot(np.ones(n), (np.dot(communicability(W_tilde), np.ones(n).transpose())))/n
+    return np.dot(np.ones(n), (np.dot(communicability(W_tilde), np.ones(n).transpose()))) / n
 
 
 def total_hub_communicability(self):  # prende in argomento la matrice W e ritorna un numero
@@ -169,7 +159,8 @@ def total_authority_communicability(self):  # prende in argomento la matrice W e
     return np.dot(np.ones(AC.shape[0]), (np.dot(AC, np.ones(AC.shape[0]).transpose())))
 
 
-def piccardi_distance_sloooow(self, T):  # prende in argomente la matrice W e la lunghezza della random walk T e ritorna un numero
+def piccardi_distance_sloooow(self,
+                              T):  # prende in argomente la matrice W e la lunghezza della random walk T e ritorna un numero
     P = to_stochastic_matrix(self)
     similarities = []
     for i in range(0, len(self)):
@@ -190,7 +181,8 @@ def piccardi_distance_sloooow(self, T):  # prende in argomente la matrice W e la
     return 1 - np.sum(distances) / len(distances)
 
 
-def piccardi_distance(self, T):  # prende in argomente la matrice W e la lunghezza della random walk T e ritorna un numero
+def piccardi_distance(self,
+                      T):  # prende in argomente la matrice W e la lunghezza della random walk T e ritorna un numero
     n = len(self)
     p = to_stochastic_matrix(self)
     pt_ij = p
@@ -216,15 +208,16 @@ def piccardi_distance(self, T):  # prende in argomente la matrice W e la lunghez
     sumd = 0
     for i in range(0, ns):
         sumd += 1 - (similarities[i] - mins) / (maxs - mins)
-
     return 1 - sumd / ns
 
 
-# per cause di tempo ho dovuto campionare 30 nodi su n per poter almeno avere un'approssimazione
-def pons_latapy_distance(self, T): # prende in argomente la matrice W e la lunghezza della random walk T e ritorna un numero
+# iteraz è il numero di sample che prendo per fare la media (per n grande sarebbe troppo dispendioso fare iteraz = n)
+def pons_latapy_distance(self, T, iteraz=30):
     n = len(self)
+    if n < iteraz:
+        return "iteraz cannot be greater than n"
     p = to_stochastic_matrix(self)
-    k = degrees(self)
+    k = out_strengths(self)
     z = 0
     while z < n:
         if k[z] == 0:
@@ -234,31 +227,56 @@ def pons_latapy_distance(self, T): # prende in argomente la matrice W e la lungh
     s = 0
     sumd = 0
     l = []
-    while len(l) < 30:
-        numero = random.randint(0, n-1)
+    while len(l) < iteraz:
+        numero = random.randint(0, n - 1)
         if numero not in l:
             l.append(numero)
     for i in l:
         for j in l:
             if j != i:
                 for h in range(0, n):
-                    s += np.power(power[i, h] - power[h, j], 2)/k[h]
+                    s += np.power(power[i, h] - power[h, j], 2) / k[h]
                 sumd += np.sqrt(s)
-                #distances.append(np.sqrt(s))
-    #return np.sum(distances) / len(distances)
-    return sumd / (30*29)
+    return sumd / (iteraz*(iteraz-1))
 
 
-def comm_estrada(self):
+def comm_invariant(self):
     n = len(self)
     g = expm(self)
     s1 = np.dot(np.diag(g), np.transpose(np.ones(n)))
     s2 = np.dot(np.ones(n), np.transpose(np.diag(g)))
-    x = 0.5*np.sqrt(s1 + s2 - 2*g)
+    x = 0.5 * np.sqrt(s1 + s2 - 2 * g)
     return np.dot(np.transpose(np.ones(n)), np.dot(x, np.ones(n)))
 
 
-def comm_estrada_01(self):
+def comm_invariant_pairs(self):
+    n = len(self)
+    g = expm(self)
+    s1 = np.dot(np.diag(g), np.transpose(np.ones(n)))
+    s2 = np.dot(np.ones(n), np.transpose(np.diag(g)))
+    x = 0.5 * np.sqrt(s1 + s2 - 2 * g)
+    pairs = []
+    for i in range(0, n):
+        for j in range(0, n):
+            if i != j:
+                pairs.append(x[i][j])
+    return pairs
+
+
+def comm_invariant_pairs_triangular(self):
+    n = len(self)
+    g = expm(self)
+    s1 = np.dot(np.diag(g), np.transpose(np.ones(n)))
+    s2 = np.dot(np.ones(n), np.transpose(np.diag(g)))
+    x = 0.5 * np.sqrt(s1 + s2 - 2 * g)
+    pairs = []
+    for i in range(0, n):
+        for j in range(i+1, n):
+            pairs.append(x[i][j])
+    return pairs
+
+
+def comm_invariant_01(self):
     n = len(self)
     g = expm(self)
     s1 = np.dot(np.diag(g), np.transpose(np.ones(n)))
@@ -267,6 +285,177 @@ def comm_estrada_01(self):
     x_min = x.min()
     x_max = x.max()
     x = (x - x_min) / (x_max - x_min)
-    return np.dot(np.transpose(np.ones(n)), np.dot(x, np.ones(n)))/(n*n)
+    return np.dot(np.transpose(np.ones(n)), np.dot(x, np.ones(n))) / (n * n)
+
+
+def directed_efficiency(self):  # prende un grafo e ritorna la sua efficiency
+    sp = nx.shortest_path(self)
+    n = nx.number_of_nodes(self)
+    s = 0
+    for i in range(0, len(sp)):
+        for x in sp[i].values():
+            # print(x)
+            if len(x) > 1:
+                s += 1 / (len(x) - 1)
+    return s / (n * (n - 1))
+
+
+def shortest_path_pairs_triangular(self):#prende un grafo e ritorna il vettore delle distanze di tutte le coppie di nodi: n(n-1)/2
+    d_ij = []
+    n = nx.number_of_nodes(self)
+    sp = dict(nx.all_pairs_shortest_path_length(self))
+    for i in range(0, n):
+        for j in range(i + 1, n):
+            d_ij.append(sp[i][j])
+    return d_ij
+
+
+def efficiency_pairs_triangular(self):#prende un grafo e ritorna il vettore delle efficiency di tutte le coppie di nodi: n(n-1)/2
+    e_ij = []
+    n = nx.number_of_nodes(self)
+    sp = dict(nx.all_pairs_shortest_path_length(self))
+    for i in range(0, n):
+        for j in range(i + 1, n):
+            e_ij.append(1/sp[i][j])
+    return e_ij
+
+
+def shortest_path_pairs(self):#prende un grafo e ritorna il vettore delle distanze di tutte le coppie di nodi: n(n-1)
+    d_ij = []
+    n = nx.number_of_nodes(self)
+    sp = dict(nx.all_pairs_shortest_path_length(self))
+    for i in range(0, n):
+        for j in range(0, n):
+            if i != j:
+                d_ij.append(sp[i][j])
+    return d_ij
+
+
+def efficiency_pairs(self):#prende un grafo e ritorna il vettore delle efficiency di tutte le coppie di nodi: n(n-1)
+    e_ij = []
+    n = nx.number_of_nodes(self)
+    sp = dict(nx.all_pairs_shortest_path_length(self))
+    for i in range(0, n):
+        for j in range(0, n):
+            if i != j:
+                e_ij.append(1/sp[i][j])
+    return e_ij
+
+
+def MFPT_pairs(self): # prende la matrice W e ritorna il vettore dei MFPT di tutte le coppie di nodi: n(n-1)
+    n = len(self)
+    m = MFPT(self)
+    pairs = []
+    for i in range(0, n):
+        for j in range(0, n):
+            if i != j:
+                pairs.append(m[i][j])
+    return pairs
+
+
+def communicability_pairs_triangular(self):
+    c = communicability(self)
+    pairs = []
+    n = len(self)
+    for i in range(0, n):
+        for j in range(i+1, n):
+            pairs.append(c[i][j])
+    return pairs
+
+
+def communicability_pairs(self):
+    c = communicability(self)
+    pairs = []
+    n = len(self)
+    for i in range(0, n):
+        for j in range(0, n):
+            if i != j:
+                pairs.append(c[i][j])
+    return pairs
+
+
+def log_communicability_pairs(self):
+    return np.log(communicability_pairs(self))
+
+# prende in argomente la matrice W e la lunghezza della random walk T e ritorna il vettore n(n-1)/2
+def piccardi_distance_pairs_triangular(self,T):
+    n = len(self)
+    p = to_stochastic_matrix(self)
+    pt_ij = p
+    pt_ji = np.transpose(p)
+    similarities = []
+    power = p
+    for t in range(2, T + 1):
+        power = np.matmul(power, p)
+        pt_ij += power
+        pt_ji += np.transpose(power)
+    p = pt_ij + pt_ji
+    for i in range(0, n):
+        for j in range(i + 1, n):
+            similarities.append(p[i, j])
+    mis = np.min(similarities)
+    mas = np.max(similarities)
+    if mas == mis:
+        if similarities[0] > 1:
+            return 1
+        else:
+            return similarities[0]
+    pairs = []
+    sl = len(similarities)
+    for i in range(0, sl):
+        pairs.append(similarities[i])
+    return pairs
+
+
+# prende in argomente la matrice W e la lunghezza della random walk T e ritorna il vettore n(n-1)
+def piccardi_distance_pairs(self, T):
+    n = len(self)
+    p = to_stochastic_matrix(self)
+    pt_ij = p
+    pt_ji = np.transpose(p)
+    similarities = []
+    power = p
+    for t in range(2, T + 1):
+        power = np.matmul(power, p)
+        pt_ij += power
+        pt_ji += np.transpose(power)
+    p = pt_ij + pt_ji
+    for i in range(0, n):
+        for j in range(0, n):
+            if i != j:
+                similarities.append(p[i, j])
+    mis = np.min(similarities)
+    mas = np.max(similarities)
+    if mas == mis:
+        if similarities[0] > 1:
+            return 1
+        else:
+            return similarities[0]
+    pairs = []
+    sl = len(similarities)
+    for i in range(0, sl):
+        pairs.append(similarities[i])
+    return pairs
+
+
+def pons_latapy_distance_pairs(self, T):
+    n = len(self)
+    p = to_stochastic_matrix(self)
+    k = out_strengths(self)
+    z = 0
+    while z < n:
+        if k[z] == 0:
+            return "It is not possible to compute pons_latapy distance since the graph is not connected"
+        z += 1
+    power = np.linalg.matrix_power(p, T)
+    s = 0
+    pairs = []
+    for i in range(0, n):
+        for j in range(0, n):
+            if j != i:
+                for h in range(0, n):
+                    s += np.power(power[i, h] - power[h, j], 2) / k[h]
+                pairs.append(np.sqrt(s))
+    return pairs
 
 
